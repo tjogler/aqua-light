@@ -71,14 +71,14 @@ class lamp(object):
         for x in self.x: #loop over all lights
             y=self.y[c]
             alpha=self.angle[c]
-            #print alpha
+            print alpha
             phisteps=self.phisteps
             nRaysPerPhi=int(np.ceil(alpha/(self.alphasteps*np.pi/180.)))
             nRays=int(np.ceil(alpha/(self.alphasteps*np.pi/180.))*phisteps)
             alphastep=alpha/nRaysPerPhi #angle stepsize in rad
             print 'Number of rays per lightsource: %s'%nRays
             print '%s rays per phi and %s phi angles'%(alpha/alphastep,nRaysPerPhi)
-            print self.leds[c].angle
+            #print self.leds[c].angle
             for a in np.linspace(0,alpha,nRaysPerPhi): #loop over all angles in single light cone
                 totRef=self.calc_total_reflection(a,self.nWater,self.nGlass)
                 angle=a*180/np.pi
@@ -330,7 +330,7 @@ class tank(object):
         self.planes=[plane1,plane2,plane3,plane4,plane5]
         
         
-def calc_light(dim,fnRb,fnWhite):
+def calc_light(dim,fnRb,fnWhite,**kwargs):
 
     '''
     script that sets up the required objects and does the plotting of the light distribution at the specified levels
@@ -340,72 +340,120 @@ def calc_light(dim,fnRb,fnWhite):
 
     Add a GUI for ease of use 
     '''
-    
+
+    print 'Aqua-light: Program to calculate Light distribution at variouse tank levels'
+
     rbLed=led(filename=fnRb,wavelength=460,power=3.)
     wLed=led(filename=fnWhite,wavelength=520,power=3.)
     
+    for k in kwargs:
+        print '%s option selected with argument %s'%(k,kwargs[k])
+        if k=="config":
+            x=[]
+            y=[]
+            leds=[]
+            angle=[]
+            try:
+                cfile=open(kwargs[k],'r+')
+            except:
+                print 'File %s does not exists'%kwargs[k]
+                exit()
+
+            xcoord=cfile.readline().split('=')[1].split(',')
+            for xx in xcoord:
+                #print xx
+                x.append(xx)
+            x=np.array(x,dtype=float)
+
+            ycoord=cfile.readline().split('=')[1].split(',')
+            for yy in ycoord:
+                #print yy
+                y.append(yy)
+            y=np.array(y,dtype=float)
+
+            ledline=cfile.readline().strip().split('=')[1].split(',')
+            for ll in ledline:
+                print ll
+                if ll=='rbLed':    
+                    leds.append(rbLed)
+                elif ll=='wLed':
+                    leds.append(wLed)
+                elif ll not in ['rbLed','wLed']:
+                    print 'ERROR: Led type not recognized please check your config file or add data for %s'%ll
+                    exit()
+
+            ledangle=cfile.readline().strip().split('=')[1].split(',')
+            print ledangle
+
+            if len(ledangle)==1:
+                angle=np.ones_like(x)*float(ledangle[0])*np.pi/180.*0.5
+            else:
+                for la in ledangle:
+                    angle.append(la)
+                angle=np.array(angle,dtype=float)*np.pi/180.*0.5
+                if len(angle)!=len(x):
+                    print 'ERROR: either provide only one angle or as many as there are leds'
+                    print 'ERROR: %s leds but %s anlge provided'%(len(leds),len(angle))
+                    exit()
+
+            if len(x)!=len(y) or len(x)!=len(leds):
+                print 'ERROR: X,Y, LEDs need same dimensions'
+                print 'X: %s'%x
+                print 'Y: %s'%y
+                print 'LEDs: $s'%leds
+                exit()
+            
+            
+            
+    
+    
     nano60=tank()
     nano60.set_lamp(nano60.water+20)
-    x=[-8,-6,-4,-2,0,2,4,6,8,-8,-6,-4,-2,0,2,4,6,8]
+    #x=[-8,-6,-4,-2,0,2,4,6,8,-8,-6,-4,-2,0,2,4,6,8]
     #x=-1.*np.array([-8.,-8.,-8.,-6.,-6.,-6.,-4.,-4.,-4.,4.,4.,4.,6.,6.,6.,8.,8.,8.])
-    #x=np.array([-14,-10.,-6.,-2.,2,6.,10.,14,-14.,-10.,-6.,-2.,2,6.,10,14,-14,-10.,-6.,-2.,2,6.,10,14])
-    #y=np.array([-11,-11.,-11.,-8.,-8.,-8.,-4.,-4.,-4.,0.,0.,0.,4.,4.,4.,8.,8.,8.,12.,12.,12.,-14.,-14.,-14.])
     #y=[-10.,-10.,-10.,-10.,-10.,-10.,-10.,-10.,0.,0.,0.,0.,0.,0.,0.,0.,10.,10.,10.,10.,10.,10.,10.,10.]
     #x=[-8.,0.,8.,-8.,0.,8.,-8.,0.,8.,-8.,0.,8.,-8.,0.,8.,-8.,0.,8.,-8.,0.,8.,-8.,0.,8.]
     #y1=[-5.,-5.,-5.,-5.,-5.,-5.,-5.,-5.,-5.]
-    y=-1.*np.array([-5.,-5.,-5.,-5.,-5.,-5.,-5.,-5.,-5.,5.,5.,5.,5.,5.,5.,5.,5.,5.])
+
+    #y=-1.*np.array([-5.,-5.,-5.,-5.,-5.,-5.,-5.,-5.,-5.,5.,5.,5.,5.,5.,5.,5.,5.,5.])
     #y=[-10.,-10.,-10.,-10.,-10.,-10.,-10.,-10.,-10.,10.,10.,10.,10.,10.,10.,10.,10.,10.]
     #y=[-2.,0.,2,-2.,0.,2,-2.,0.,2,-2.,0.,2,-2.,0.,2,-2.,0.,2,]
-    #angle=np.array([115,115,115,115,115,115,115,115,115])*0.5*np.pi/180.
-    angle=np.ones(18)*180*0.5*np.pi/180.
-    #x=[18.]
-    #y=[0.]
-    #angle=np.array([90])*0.5*np.pi/180.
     z=0.0
-    leds=[rbLed,wLed,rbLed,wLed,rbLed,wLed,rbLed,wLed,rbLed,wLed,rbLed,wLed,rbLed,wLed,rbLed,wLed,rbLed,wLed]
     lamps=lamp(x=y,y=x,z=z,led=leds,angle=angle)
-    #print lamp.x
     numBin=1.4*nano60.length*10
     sizex=np.linspace(-1.2*nano60.length/2.,1.2*nano60.length/2.,numBin)
     sizey=np.linspace(-1.2*nano60.width/2.,1.2*nano60.width/2.,numBin)
-    #print sizex
+    lamps.set_ray_resolution(10.,90.)
 
     zlevel=np.linspace(nano60.waterZ,nano60.sandZ,int(abs(nano60.waterZ-nano60.sandZ)/5.))
-    #zlevel=[nano60.waterZ]
-    #print zlevel
-    fig=P.figure()
+    fig=P.figure(figsize=(10, 8), dpi=80)
     counter=0
 
-    lamps.set_ray_resolution(1.,180.)
+    
     
     for z in zlevel:
         print 'calculating level %i at waterdepth %f'%(counter,abs(z-nano60.waterZ))
-        #lamp.get_overlay_intens(z,sizex,sizey)
-        #ax=fig.add_axes([0.175,0.15,0.8,0.8])
         X,Y,H=lamps.get_intensity_level(nano60.planes,z,nano60.limits)
         if counter==0:
-            #print X,Y,H
             colorlevel=np.linspace(np.array(H).min(),np.array(H).max(),20)
 
         ax=fig.add_subplot(3,3,counter+1)
+        plt.subplots_adjust(hspace = 0.3)
         counter+=1
         ax.add_patch(patches.Rectangle((-nano60.length/2.,-nano60.width/2.), width=nano60.length, height=nano60.width,linewidth=2,fill=False))
-        #ax=plt.contourf(sizex,sizey,lamp.overIntens,levels=colorlevel)
+        stitle='Depth: %4.1f cm'%abs(z-nano60.waterZ)
+        ax.set_title(stitle)
         print 'Size x: %s  min,max: %s, %s'%(np.size(X),X.min(),X.max())
         print 'Size y: %s  min,max: %s, %s'%(np.size(Y),Y.min(),Y.max())
         print 'Size w: %s  min,max: %s, %s'%(np.size(H),H.min(),H.max())
-        #hist=np.histogram2d(X,Y,weights=H,bins=[np.linspace(-6.3,6.3,20),np.linspace(-6.3,6.3,20)])
-        #print hist
-        #ax=plt.imshow(hist, interpolation='nearest')
+        
         tsHistMatplot,xedges,yedges=np.histogram2d(X,Y,weights=H,bins=[np.linspace(-25,25,50),np.linspace(-25,25,50)])
         tsHistMatplot.shape,xedges.shape,yedges.shape
-        #print xedges
-        #print yedges
         extension=[yedges[0],yedges[-1],xedges[0],xedges[-1]]
     
         tsImgMplot=ax.imshow(tsHistMatplot,origin="lower",extent=extension,interpolation='nearest',vmin=0,vmax=0.2)#lamp.intensRay*500)
         #lower,upper=ax.xlim()
-        #ax=plt.pcolormesh(X, Y, H)
+        
     cax = fig.add_axes([0.9, 0.1, 0.03, 0.8])
     fig.colorbar(tsImgMplot,cax=cax)
     fig.show()
@@ -415,8 +463,13 @@ def calc_light(dim,fnRb,fnWhite):
     
 parser=argparse.ArgumentParser()
 parser.add_argument("--dimension",help="bxtxh Breite Tiefe Hoehe",type=str,default="38x38x43")
+parser.add_argument("--config",help="supply a config filename if you want to use config files for lampdefintions",type=str)
 parser.add_argument("--fnWhite",help="Filename containing intensity data for white led",type=str,default="cree_xpe2_cold_white_fine.csv")
 parser.add_argument("--fnRb",help="Filename containing intensity data for royal blue led",type=str,default="cree_xte_royal_blue_fine.csv")
 args=parser.parse_args()
+if args.config!=None:
+    kwargs={"config":args.config}
+else:
+    kwargs={}
 
-calc_light(args.dimension,args.fnWhite,args.fnRb)
+calc_light(args.dimension,args.fnWhite,args.fnRb,**kwargs)
