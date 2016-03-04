@@ -57,8 +57,8 @@ class lamp(object):
         self.overIntens=-1
         self.phisteps=1.
         self.alphasteps=1.
-        self.nWater=1.33 #no wavelength dependence yet but that's anyway minor effect
-        self.nGlass=1.52 #no wavelength dependence yet but that's anyway minor effect
+        self.nWater=1.3393 #no wavelength dependence yet but that's anyway a minor effect, assuming 3.5% salt and 20 deg C
+        self.nGlass=1.52 #no wavelength dependence yet but that's anyway a minor effect also might be deviate depending on glass type
         self.calc_refraction_angle(1.0,self.nWater)
         self._init_rays()
         
@@ -71,14 +71,16 @@ class lamp(object):
         for x in self.x: #loop over all lights
             y=self.y[c]
             alpha=self.angle[c]
-            print alpha
+            #print alpha
             phisteps=self.phisteps
             nRaysPerPhi=int(np.ceil(alpha/(self.alphasteps*np.pi/180.)))
             nRays=int(np.ceil(alpha/(self.alphasteps*np.pi/180.))*phisteps)
             alphastep=alpha/nRaysPerPhi #angle stepsize in rad
+
             print 'Number of rays per lightsource: %s'%nRays
             print '%s rays per phi and %s phi angles'%(alpha/alphastep,nRaysPerPhi)
             #print self.leds[c].angle
+
             for a in np.linspace(0,alpha,nRaysPerPhi): #loop over all angles in single light cone
                 totRef=self.calc_total_reflection(a,self.nWater,self.nGlass)
                 angle=a*180/np.pi
@@ -99,6 +101,55 @@ class lamp(object):
     def _set_phisteps(self,phistep):
         self.phisteps=phistep
             
+
+    def _set_planes(self,x,y,z,l,w,h):
+        '''
+        define the bottom and sides of the lamp as planes, so five planes
+        planes are defined as [normal_vector,point1,point2]
+        n(p1-p2)=n1*(p11-p21)+n2(p12-p22)+n3(p13-p23)
+           2
+           _ 
+        1 |_|3  bottom 5
+           4
+
+
+        Input is the x,y coordinate of the center of the lamp and z ist he z coordinate of the top of the lamp above the tank
+        l,w,h are the lengh, width and the height of the lamp
+        '''
+
+        xlimit=[x+l/2.,x-l/2.]
+        ylimit=[y+w/2.,y-w/2.]
+        zlimit=[h,-h]
+        
+        planes=[]
+        n_xlimit=np.array([1,0,0])
+        n_ylimit=np.array([0,1,0])
+        n_zlimit=np.array([0,0,1])
+
+        p1_1=np.array([xlimit[1],5.,5.])
+        plane1=[-1.*n_xlimit,p1_1]
+
+        p2_1=np.array([3.,ylimit[1],3.])
+        plane2=[-1.*n_ylimit,p2_1]
+
+        p3_1=np.array([xlimit[0],5.,5.])
+        plane3=[-1.*n_xlimit,p3_1]
+
+        p4_1=np.array([3.,ylimit[0],3.])
+        plane4=[-1.*n_ylimit,p4_1]
+
+        p5_1=np.array([1.,1.,zlimit[0]])
+        plane5=[1.*n_zlimit,p5_1]
+
+        planes=[plane1,plane2,plane3,plane4,plane5]
+        limits=[[xlimit[0],ylimit[0],zlimit[0]],[xlimit[1],ylimit[1],zlimit[1]]]
+
+        #print 'Planes: %s'%planes
+        #print 'Limits: %s'%limits
+        return planes,limits
+
+        
+        
     def _set_alphasteps(self,alphastep):
         self.alphasteps=alphastep        
 
@@ -118,13 +169,15 @@ class lamp(object):
                 S=ray[0]*t+ray[1]
                 #print 'S:',S
                 #print 'S %s'%S
-                #print (S<=limits).all(), (S>=-limits).all()
-                if (S<=limits).all() and (S>=-limits).all() :
-                    #print type(S)
-                    #print 'S: %s  Limit:%s'%(S,limits)
+                #print (S<=limits[0]).all(), (S>=-limits[1]).all()
+                if (S<=limits[0]).all() and (S>=limits[1]).all() :
                     inter=True
                     break
-        #print S,p,limits,(S<=limits).all() and (S>=-limits).all()
+            elif t<0:
+                S=np.nan
+                p=np.nan
+                
+                    
         return inter,S,p
 
     def calc_new_ray(self,iPoint,ray,plane):
@@ -140,16 +193,49 @@ class lamp(object):
         newray=[newdirect,iPoint,ray[2],ray[3],ray[4]] # the intensity is not changed when reflected that should be modified in the future 
         return newray
 
+    
+    def calc_refraction_angle(self,n1,n2):
+        self.angle=np.arcsin(n1*np.sin(self.angle)/n2)
+
+    def calc_total_reflection(self,alpha,n1,n2):
+        beta=90.-(np.arcsin(n1/n2*np.sin(alpha)))*180/np.pi
+        thetaC=np.arcsin(n1/n2)*180/np.pi
+        if beta>thetaC:
+            return True
+        else:
+            return False
+        
+        
+    def get_ind_area(self,z):
+        self.area_z=z
+        self.area=np.pi*(z*np.tan(self.angle))**2.
+        
+    def get_radius(self,z):
+         self.radius=abs(z*np.tan(self.angle))
+
     def get_intensity_level(self,planes,level,limits):
         planes[4][1]=np.array([1,1,level])
-        limits[2]=abs(level) # need to change the z limit to the current level z so that the intersect function only breaks if ray hits the bottom plane within x_limit,y_limit
+        print limits
+        limits[1][2]=level
+        limits[0][2]=-level# need to change the z limit to the current level z so that the intersect function only breaks if ray hits the bottom plane within x_limit,y_limit
         counter =0
         temp_ray_list=[]
         intensX=[]
         intensY=[]
         intensP=[]
         bookkeeping=[]
-        
+        '''lim=[[],[]]
+        for i,l in enumerate(limits):
+            lim[0].append(l) #convert symmetric tank limits into general limits
+            if i!=2:
+                lim[1].append(-l)#convert symmetric tank limits into general limits
+            else:
+                lim[1].append(l)
+            #conversion is required to use ray intersection function also for lamp limits required in lamp shadowing calculation
+        lim[0]=np.array(lim[0])
+        lim[1]=np.array(lim[1])
+        lim=np.array(lim)
+        #print 'limits: ',lim'''
         print 'Get_intensity_level: %s Rays at level'%len(self.rays)
         ntrc=0
         for r in self.rays: # check for each ray if it intersects with any plane
@@ -210,30 +296,12 @@ class lamp(object):
                 c+=1
                 #print counter
 
-        print '%s Rays left volume because of no total reflection'%ntrc
+        print '%s Rays left volume because of  no total reflection'%ntrc
         #intensDist=np.histogram2d(intensX,intensY,weights=intensP,bins=100)
         return np.array(intensX),np.array(intensY),np.array(intensP)
                     
                 
-    def calc_refraction_angle(self,n1,n2):
-        self.angle=np.arcsin(n1*np.sin(self.angle)/n2)
-
-    def calc_total_reflection(self,alpha,n1,n2):
-        beta=90-(np.arcsin(n1/n2*np.sin(alpha)))*180/np.pi
-        thetaC=np.arcsin(n1/n2)*180/np.pi
-        if beta>thetaC:
-            return True
-        else:
-            return False
-        
-        
-    def get_ind_area(self,z):
-        self.area_z=z
-        self.area=np.pi*(z*np.tan(self.angle))**2.
-        
-    def get_radius(self,z):
-         self.radius=abs(z*np.tan(self.angle))
-        
+         
     def get_intens(self,z):
         self.get_ind_area(z)
         self.radius=abs(z*np.tan(self.angle))
@@ -252,7 +320,29 @@ class lamp(object):
             mask=(np.sqrt((levelx-x)**2.+(levely-self.y[counter])**2.)<self.radius[counter])
             self.overIntens+=self.intensity[counter]*(np.sqrt((x2-x)**2.+(y2-self.y[counter])**2.)<self.radius[counter])
             counter+=1
+
+
             
+    def calc_lamp_shadowing(self,lamp):
+        '''
+        function that calculates the lamp limits and after that calculates the shadowing caused by the lamp removing all rays that do not enter the aquarium and thus are lost (reflecting is not assumed since diffuse reflection is not implemented
+       
+        the function is invoked with lamp=[[x,y,z,l,w,h],[x,y,z,l,w,h]....] providing for each lamp a list with the x,y,z postion of the lamp where x,y are the center positon of the lamp and z is the height above the tank measured from the exit of the light source, l,w and h are the length the width and the height of the lamp as measured from the exit of the light source
+        '''
+        counter=0
+        print 'starting lamp shadowing calculation'
+        initialCount=len(self.rays)
+        for l in lamp:
+            planes,limits=self._set_planes(l[0],l[1],l[2],l[3],l[4],l[5])
+            for i,r in enumerate(self.rays):
+                #print 'ray %i'%i
+                delete,dummy1,dummy2=self.calc_intersection(planes,r,limits)
+                if delete:
+                    del self.rays[i]
+                    counter+=1
+                    
+        print 'lamp shadowing applied, %i rays absorbed of %i initial rays (%.3f percent)'%(counter,initialCount,float(counter)/float(initialCount))
+
     def set_ray_resolution(self,nalpha,nphi):
         '''
         Sets the number of steps in alpha and in phi
@@ -396,6 +486,20 @@ def calc_light(dim,fnRb,fnWhite,**kwargs):
                     print 'ERROR: %s leds but %s anlge provided'%(len(leds),len(angle))
                     exit()
 
+            lampline=cfile.readline().strip().split('=')[1].split(';')
+            if lampline=='':
+                calc_shadowing=False
+            else:
+                lampDim=[]
+                calc_shadowing=True
+                for i,lDim in enumerate(lampline):
+                    print i,lDim
+                    lampDim.append([])
+                    for l in lDim.split(','):
+                        lampDim[i].append(float(l))
+                print lampDim
+        
+                    
             if len(x)!=len(y) or len(x)!=len(leds):
                 print 'ERROR: X,Y, LEDs need same dimensions'
                 print 'X: %s'%x
@@ -403,28 +507,18 @@ def calc_light(dim,fnRb,fnWhite,**kwargs):
                 print 'LEDs: $s'%leds
                 exit()
             
-            
-            
-    
     
     nano60=tank()
     nano60.set_lamp(nano60.water+20)
-    #x=[-8,-6,-4,-2,0,2,4,6,8,-8,-6,-4,-2,0,2,4,6,8]
-    #x=-1.*np.array([-8.,-8.,-8.,-6.,-6.,-6.,-4.,-4.,-4.,4.,4.,4.,6.,6.,6.,8.,8.,8.])
-    #y=[-10.,-10.,-10.,-10.,-10.,-10.,-10.,-10.,0.,0.,0.,0.,0.,0.,0.,0.,10.,10.,10.,10.,10.,10.,10.,10.]
-    #x=[-8.,0.,8.,-8.,0.,8.,-8.,0.,8.,-8.,0.,8.,-8.,0.,8.,-8.,0.,8.,-8.,0.,8.,-8.,0.,8.]
-    #y1=[-5.,-5.,-5.,-5.,-5.,-5.,-5.,-5.,-5.]
-
-    #y=-1.*np.array([-5.,-5.,-5.,-5.,-5.,-5.,-5.,-5.,-5.,5.,5.,5.,5.,5.,5.,5.,5.,5.])
-    #y=[-10.,-10.,-10.,-10.,-10.,-10.,-10.,-10.,-10.,10.,10.,10.,10.,10.,10.,10.,10.,10.]
-    #y=[-2.,0.,2,-2.,0.,2,-2.,0.,2,-2.,0.,2,-2.,0.,2,-2.,0.,2,]
     z=0.0
     lamps=lamp(x=y,y=x,z=z,led=leds,angle=angle)
     numBin=1.4*nano60.length*10
     sizex=np.linspace(-1.2*nano60.length/2.,1.2*nano60.length/2.,numBin)
     sizey=np.linspace(-1.2*nano60.width/2.,1.2*nano60.width/2.,numBin)
-    lamps.set_ray_resolution(10.,90.)
 
+    lamps.set_ray_resolution(180./kwargs['resalpha'],kwargs['resphi'])
+    if calc_shadowing:
+        lamps.calc_lamp_shadowing(lampDim)
     zlevel=np.linspace(nano60.waterZ,nano60.sandZ,int(abs(nano60.waterZ-nano60.sandZ)/5.))
     fig=P.figure(figsize=(10, 8), dpi=80)
     counter=0
@@ -433,7 +527,8 @@ def calc_light(dim,fnRb,fnWhite,**kwargs):
     
     for z in zlevel:
         print 'calculating level %i at waterdepth %f'%(counter,abs(z-nano60.waterZ))
-        X,Y,H=lamps.get_intensity_level(nano60.planes,z,nano60.limits)
+        print [nano60.limits,-nano60.limits]
+        X,Y,H=lamps.get_intensity_level(nano60.planes,z,[nano60.limits,-nano60.limits])
         if counter==0:
             colorlevel=np.linspace(np.array(H).min(),np.array(H).max(),20)
 
@@ -466,10 +561,14 @@ parser.add_argument("--dimension",help="bxtxh Breite Tiefe Hoehe",type=str,defau
 parser.add_argument("--config",help="supply a config filename if you want to use config files for lampdefintions",type=str)
 parser.add_argument("--fnWhite",help="Filename containing intensity data for white led",type=str,default="cree_xpe2_cold_white_fine.csv")
 parser.add_argument("--fnRb",help="Filename containing intensity data for royal blue led",type=str,default="cree_xte_royal_blue_fine.csv")
+parser.add_argument("--resalpha",help="number of rays in the alpha angle, default=180 (1 deg spacing)",type=int,default=180.)
+parser.add_argument("--resphi",help="number of rays in the phi angle, default=1800 (2 deg spacing)",type=int,default=180.)
 args=parser.parse_args()
+kwargs={"resalpha":args.resalpha,"resphi":args.resphi}
 if args.config!=None:
-    kwargs={"config":args.config}
-else:
-    kwargs={}
+    kwargs["config"]=args.config
+
+
+
 
 calc_light(args.dimension,args.fnWhite,args.fnRb,**kwargs)
