@@ -534,9 +534,8 @@ def calc_light(dim,fnRb,fnWhite,**kwargs):
                 print 'LEDs: $s'%leds
                 exit()
             
-    
-    nano60=tank()
-    nano60.set_lamp(nano60.water+20)
+    dimensions=dim.split('x')
+    nano60=tank(l=float(dimensions[0]),w=float(dimensions[1]),h=float(dimensions[2]),sand=kwargs['zsand'])
     z=0.0
     lamps=lamp(x=x,y=y,z=z,led=leds,angle=angle)
     numBin=1.4*nano60.length*10
@@ -547,7 +546,7 @@ def calc_light(dim,fnRb,fnWhite,**kwargs):
     if calc_shadowing:
         lamps.calc_lamp_shadowing(lampDim)
         #exit()
-    zlevel=np.linspace(nano60.waterZ,nano60.sandZ,int(abs(nano60.waterZ-nano60.sandZ)/5.))
+    zlevel=np.linspace(nano60.waterZ,nano60.sandZ,int(np.floor(abs(nano60.waterZ-nano60.sandZ)/kwargs["dz_level"])))
     fig=P.figure(figsize=(10, 8), dpi=80)
     counter=0
 
@@ -570,7 +569,7 @@ def calc_light(dim,fnRb,fnWhite,**kwargs):
         print 'Size y: %s  min,max: %s, %s'%(np.size(Y),Y.min(),Y.max())
         print 'Size w: %s  min,max: %s, %s'%(np.size(H),H.min(),H.max())
         
-        tsHistMatplot,xedges,yedges=np.histogram2d(X,Y,weights=H,bins=[np.linspace(-25,25,50),np.linspace(-25,25,50)])
+        tsHistMatplot,xedges,yedges=np.histogram2d(Y,X,weights=H,bins=[np.linspace(-np.ceil((nano60.width+10)/2.),np.ceil((nano60.width+10)/2.),np.ceil(nano60.width+10)),np.linspace(-np.ceil((nano60.length+10)/2),np.ceil((nano60.length+10)/2.),np.ceil(nano60.length+10))])
         tsHistMatplot.shape,xedges.shape,yedges.shape
         extension=[yedges[0],yedges[-1],xedges[0],xedges[-1]]
     
@@ -591,9 +590,12 @@ parser.add_argument("--fnWhite",help="Filename containing intensity data for whi
 parser.add_argument("--fnRb",help="Filename containing intensity data for royal blue led",type=str,default="cree_xte_royal_blue_fine.csv")
 parser.add_argument("--resalpha",help="number of rays in the alpha angle, default=180 (1 deg spacing)",type=int,default=180.)
 parser.add_argument("--resphi",help="number of rays in the phi angle, default=1800 (2 deg spacing)",type=int,default=180.)
+parser.add_argument("--zlamp",help="height of the lamp in cm above the tank",type=float,default=20.)
+parser.add_argument("--dz",help="estimated depth difference between intensity levels",type=float,default=5)
+parser.add_argument("--zsand",help="height of sand above ground in cm (usually 1-2 cm): default=2cm",type=float,default=2.)
 
 args=parser.parse_args()
-kwargs={"resalpha":args.resalpha,"resphi":args.resphi}
+kwargs={"resalpha":args.resalpha,"resphi":args.resphi,"zlamp":args.zlamp,"dz_level":args.dz,"zsand":args.zsand}
 if args.config!=None:
     kwargs["config"]=args.config
 
