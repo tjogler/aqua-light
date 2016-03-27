@@ -10,10 +10,11 @@ import pylab as P
 
 class led(object):
     '''
-    class that makes leds and reads light distribution from a cvs file
+    class that makes leds and reads led light distribution from a cvs file
     File mus have 7 header lines and then tabulated X,Y
-    In case anyone prefers other formats please add corresponding function
+    In case anyone prefers other formats please add corresponding functionality
     '''
+    
     def __init__(self,filename,wavelength,power):
         self.wavelength=wavelength
         self.fileName=filename
@@ -58,17 +59,16 @@ class lamp(object):
         self.phisteps=1.
         self.alphasteps=1.
         self.nWater=1.3393 #no wavelength dependence yet but that's anyway a minor effect, assuming 3.5% salt and 20 deg C
-        self.nGlass=1.472 #Borofloat glas (1.52 in other references) no wavelength dependence yet but that's anyway a minor effect also might be deviate depending on glass type
+        self.nGlass=1.472 #Borofloat glas (1.52 in other references) no wavelength dependence yet but that's anyway a minor effect also might will deviate depending on glass type
         self.transGlass=0.92 #Transmission of Borofloat glass other glasses would be different
         self.transLampWindow=0.92 #Transmission of plexiglass
-        #self.calc_refraction_angle(1.0,self.nWater)
         self._init_rays()
         
         #print self.angle*180./np.pi
 
     def _init_rays(self):
         c=0
-        self.rays=[] #contains all the direction vectors for each light source position
+        self.rays=[] #contains all the direction vectors for each light source position defined as: ray=[np.array([r*np.cos(p),r*np.sin(p),-1.]),np.array([x,y,self.z]),intens,a,totRef] where the firt array is the direction and the second the starting point
         ray_list=[]
         for x in self.x: #loop over all lights
             y=self.y[c]
@@ -77,9 +77,9 @@ class lamp(object):
             nRaysPerPhi=self.alphasteps
             nRays=self.alphasteps*phisteps
             alphastep=alpha/nRaysPerPhi #angle stepsize in rad
-
-            print 'Number of rays per lightsource: %s'%nRays
-            print '%s rays per phi and %s phi angles'%(nRaysPerPhi,phisteps)
+            if c==0:
+                print 'Number of rays per lightsource: %s'%nRays
+                print '%s rays per phi and %s phi angles'%(nRaysPerPhi,phisteps)
             #print self.leds[c].angle
 
             for a in np.linspace(0,alpha,nRaysPerPhi): #loop over all angles in single light cone
@@ -98,12 +98,43 @@ class lamp(object):
         self.rays=ray_list
         
 
-    def _refract_rays(self,n1,n2,level):
+    def _refract_rays(self,S,n1=1.0,n2="default"):
+        '''
+        function that refract each ray once it hits the water surface
+        the refraction angle is in self.refacAngle
+        S is the intersection point of the ray with the water surface 
+        the frunction recalculates the new direction by changing (x1,x2)
+        while leaving x3 unchanged 
+        '''
+        if n2=="default":
+            n2=self.nWater
         for r in self.rays:
-            print 'has to be implemented'
-            
-        
+            refracAngle=self.calc_refraction_angle(n1,n2,r[3])
+            sinphi=r[0][0]/r[0][2]*np.tan(r[3])
+            cosphi=r[0][1]/r[0][2]*np.tan(r[3])
+            r[0][0]=r[0][2]*np.tan(refracAngle)*sinphi
+            r[0][1]=r[0][2]*np.tan(refracAngle)*cosphi
+            r[3]=refracAngle
+            r[1]=S
 
+    def _refract_ray(self,r,S,n1=1.0,n2="default"):
+        '''
+        function that refract each ray once it hits the water surface
+        the refraction angle is in self.refacAngle
+        S is the intersection point of the ray with the water surface 
+        the frunction recalculates the new direction by changing (x1,x2)
+        while leaving x3 unchanged 
+        '''
+        if n2=="default":
+            n2=self.nWater
+        refracAngle=self.calc_refraction_angle(n1,n2,r[3])
+        sinphi=r[0][0]/r[0][2]*np.tan(r[3])
+        cosphi=r[0][1]/r[0][2]*np.tan(r[3])
+        r[0][0]=r[0][2]*np.tan(refracAngle)*sinphi
+        r[0][1]=r[0][2]*np.tan(refracAngle)*cosphi
+        r[3]=refracAngle
+        r[1]=S
+    
     def _set_phisteps(self,phistep):
         self.phisteps=phistep
             
@@ -199,9 +230,10 @@ class lamp(object):
         return newray
 
     
-    def calc_refraction_angle(self,n1,n2):
-        self.angle=np.arcsin(n1*np.sin(self.angle)/n2)
-
+    def calc_refraction_angle(self,n1,n2,angle):
+        refracAngle=np.arcsin(n1*np.sin(angle)/n2)
+        return refracAngle
+    
     def calc_total_reflection(self,alpha,n1,n2):
         beta=90.-(np.arcsin(n1/n2*np.sin(alpha)))*180/np.pi
         thetaC=np.arcsin(n1/n2)*180/np.pi
@@ -218,7 +250,7 @@ class lamp(object):
     def get_radius(self,z):
         self.radius=abs(z*np.tan(self.angle))
 
-    def get_intensity_level(self,planes,level,limits):
+    def get_intensity_level(self,planes,level,limits,refrac=False):
         planes[4][1]=np.array([1,1,level])
         limits[1][2]=level
         limits[0][2]=-level # need to change the z limit to the current level z so that the intersect function only breaks if ray hits the bottom plane within x_limit,y_limit
@@ -256,6 +288,8 @@ class lamp(object):
                 intensX.append(S[0])
                 intensY.append(S[1])
                 intensP.append(r[2])
+                if refrac:
+                    self._refract_ray(r,S)
             if not res:
                 del self.rays[counter]
             counter+=1
@@ -283,6 +317,8 @@ class lamp(object):
                     intensY.append(S[1])
                     intensP.append(r[2])
                     del temp_ray_list[c]
+                    if refrac:
+                        self._refract_ray(r,S)
                     #print temp_ray_list
                 if not res:
                     del temp_ray_list[c]
@@ -402,7 +438,7 @@ class tank(object):
         self.lampZreal=height
         self.waterZ=self.water-self.lampZreal
         self.sandZ=self.sand-self.lampZreal
-        print self.lampZreal,self.waterZ,self.sandZ
+        #print self.lampZreal,self.waterZ,self.sandZ
         self.set_limits()
         self.set_planes()
 
@@ -456,8 +492,9 @@ def calc_light(dim,fnRb,fnWhite,**kwargs):
 
     Add a GUI for ease of use 
     '''
-
+    print '==========================================================================='
     print 'Aqua-light: Program to calculate Light distribution at variouse tank levels'
+    print "==========================================================================="
 
     rbLed=led(filename=fnRb,wavelength=460,power=3.)
     wLed=led(filename=fnWhite,wavelength=520,power=3.)
@@ -489,7 +526,7 @@ def calc_light(dim,fnRb,fnWhite,**kwargs):
 
             ledline=cfile.readline().strip().split('=')[1].split(',')
             for ll in ledline:
-                print ll
+                #print ll
                 if ll=='rbLed':    
                     leds.append(rbLed)
                 elif ll=='wLed':
@@ -499,7 +536,7 @@ def calc_light(dim,fnRb,fnWhite,**kwargs):
                     exit()
 
             ledangle=cfile.readline().strip().split('=')[1].split(',')
-            print ledangle
+            #print ledangle
 
             if len(ledangle)==1:
                 angle=np.ones_like(x)*float(ledangle[0])*np.pi/180.*0.5
@@ -524,7 +561,7 @@ def calc_light(dim,fnRb,fnWhite,**kwargs):
                     lampDim.append([])
                     for l in lDim.split(','):
                         lampDim[i].append(float(l))
-                print lampDim
+                #print lampDim
         
                     
             if len(x)!=len(y) or len(x)!=len(leds):
@@ -554,8 +591,14 @@ def calc_light(dim,fnRb,fnWhite,**kwargs):
     
     for z in zlevel:
         print 'calculating level %i at waterdepth %f'%(counter,abs(z-nano60.waterZ))
-        print [nano60.limits,-nano60.limits]
-        X,Y,H=lamps.get_intensity_level(nano60.planes,z,[nano60.limits,-nano60.limits])
+        #print [nano60.limits,-nano60.limits]
+        if (z==nano60.waterZ):
+            water=True
+            print 'Refraction of ray at water surface'
+        else:
+            water=False
+            print 'no refraction'
+        X,Y,H=lamps.get_intensity_level(nano60.planes,z,[nano60.limits,-nano60.limits],refrac=water)
         if counter==0:
             colorlevel=np.linspace(np.array(H).min(),np.array(H).max(),20)
 
@@ -565,9 +608,9 @@ def calc_light(dim,fnRb,fnWhite,**kwargs):
         ax.add_patch(patches.Rectangle((-nano60.length/2.,-nano60.width/2.), width=nano60.length, height=nano60.width,linewidth=2,fill=False))
         stitle='Depth: %4.1f cm'%abs(z-nano60.waterZ)
         ax.set_title(stitle)
-        print 'Size x: %s  min,max: %s, %s'%(np.size(X),X.min(),X.max())
-        print 'Size y: %s  min,max: %s, %s'%(np.size(Y),Y.min(),Y.max())
-        print 'Size w: %s  min,max: %s, %s'%(np.size(H),H.min(),H.max())
+       # print 'Size x: %s  min,max: %s, %s'%(np.size(X),X.min(),X.max())
+       # print 'Size y: %s  min,max: %s, %s'%(np.size(Y),Y.min(),Y.max())
+       # print 'Size w: %s  min,max: %s, %s'%(np.size(H),H.min(),H.max())
         
         tsHistMatplot,xedges,yedges=np.histogram2d(Y,X,weights=H,bins=[np.linspace(-np.ceil((nano60.width+10)/2.),np.ceil((nano60.width+10)/2.),np.ceil(nano60.width+10)),np.linspace(-np.ceil((nano60.length+10)/2),np.ceil((nano60.length+10)/2.),np.ceil(nano60.length+10))])
         tsHistMatplot.shape,xedges.shape,yedges.shape
@@ -575,7 +618,7 @@ def calc_light(dim,fnRb,fnWhite,**kwargs):
     
         tsImgMplot=ax.imshow(tsHistMatplot,origin="lower",extent=extension,interpolation='nearest',vmin=0,vmax=0.2)#lamp.intensRay*500)
         #lower,upper=ax.xlim()
-        
+        print "\n"
     cax = fig.add_axes([0.9, 0.1, 0.03, 0.8])
     fig.colorbar(tsImgMplot,cax=cax)
     fig.show()
