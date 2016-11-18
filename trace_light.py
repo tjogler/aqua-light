@@ -4,6 +4,7 @@ import os,sys,glob
 import numpy as np
 from math import degrees
 import argparse
+import matplotlib as mpl
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 import pylab as P
@@ -408,7 +409,8 @@ class lamp(object):
     def set_ray_resolution(self,nalpha,nphi):
         '''
         Sets the number of steps in alpha and in phi
-        Number of rays should not be too large because of computation time, usually 2e5 should suffice, just use a bit larger bins when plotting the light distribution
+        Number of rays should not be too large because of computation time, 
+        usually 2e5 should suffice, just use a bit larger bins when plotting the light distribution
         '''
         self._set_alphasteps(nalpha)
         self._set_phisteps(nphi)
@@ -493,7 +495,7 @@ def calc_light(dim,fnRb,fnWhite,**kwargs):
     Add a GUI for ease of use 
     '''
     print '==========================================================================='
-    print 'Aqua-light: Program to calculate Light distribution at variouse tank levels'
+    print 'Aqua-light: Program to calculate light distribution at variouse tank levels'
     print "==========================================================================="
 
     rbLed=led(filename=fnRb,wavelength=460,power=3.)
@@ -615,8 +617,12 @@ def calc_light(dim,fnRb,fnWhite,**kwargs):
         tsHistMatplot,xedges,yedges=np.histogram2d(Y,X,weights=H,bins=[np.linspace(-np.ceil((nano60.width+10)/2.),np.ceil((nano60.width+10)/2.),np.ceil(nano60.width+10)),np.linspace(-np.ceil((nano60.length+10)/2),np.ceil((nano60.length+10)/2.),np.ceil(nano60.length+10))])
         tsHistMatplot.shape,xedges.shape,yedges.shape
         extension=[yedges[0],yedges[-1],xedges[0],xedges[-1]]
-    
-        tsImgMplot=ax.imshow(tsHistMatplot,origin="lower",extent=extension,interpolation='nearest',vmin=0,vmax=0.2)#lamp.intensRay*500)
+
+        if kwargs["logscale"]:
+            tsImgMplot=ax.imshow(tsHistMatplot,origin="lower",extent=extension,interpolation='nearest',vmin=max(kwargs["smin"],1.e-7),vmax=kwargs["smax"],norm=mpl.colors.LogNorm())#lamp.intensRay*500)
+        else:
+            tsImgMplot=ax.imshow(tsHistMatplot,origin="lower",extent=extension,interpolation='nearest',vmin=kwargs["smin"],vmax=kwargs["smax"])#lamp.intensRay*500)
+        
         #lower,upper=ax.xlim()
         print "\n"
     cax = fig.add_axes([0.9, 0.1, 0.03, 0.8])
@@ -636,9 +642,12 @@ parser.add_argument("--resphi",help="number of rays in the phi angle, default=18
 parser.add_argument("--zlamp",help="height of the lamp in cm above the tank",type=float,default=20.)
 parser.add_argument("--dz",help="estimated depth difference between intensity levels",type=float,default=5)
 parser.add_argument("--zsand",help="height of sand above ground in cm (usually 1-2 cm): default=2cm",type=float,default=2.)
+parser.add_argument("--smax",help="maximum of color scale",type=float,default=0.2)
+parser.add_argument("--smin",help="minimum of color scale",type=float,default=0)
+parser.add_argument("--logscale",help="log color scale",action="store_true",default=False)
 
 args=parser.parse_args()
-kwargs={"resalpha":args.resalpha,"resphi":args.resphi,"zlamp":args.zlamp,"dz_level":args.dz,"zsand":args.zsand}
+kwargs={"resalpha":args.resalpha,"resphi":args.resphi,"zlamp":args.zlamp,"dz_level":args.dz,"zsand":args.zsand,"smax":args.smax,"smin":args.smin,"logscale":args.logscale}
 if args.config!=None:
     kwargs["config"]=args.config
 
